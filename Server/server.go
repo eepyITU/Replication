@@ -6,16 +6,18 @@ import (
 	"io"
 	"log"
 	"os"
+
+	"google.golang.org/grpc"
 )
 
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
-	Leadertoken      bool
-	ClientChannels   map[string][]chan *pb.Message
-	ServerChannels   map[string][]chan *pb.Message
-	Lamport          int32
-	HighestBidAmount int32
-	HighestBidder    string
+	Leadertoken    bool
+	ClientChannels map[string][]chan *pb.Message
+	ServerChannels map[string][]chan *pb.Message
+	Lamport        int32
+	HighestBid     int
+	HighestBidder  string
 }
 
 func (s *AuctionServiceServer) JoinAuction(ch *pb.Channel, msgStream pb.AuctionService_JoinAuctionServer) error {
@@ -70,6 +72,12 @@ func formatMessage(msg *pb.Message) string {
 		msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
 }
 
+func isNumeric(msg string) bool {
+	var number int
+	_, err := fmt.Sscanf(msg, "%d", &number)
+	return err == nil
+}
+
 func (s *AuctionServiceServer) ProcessMessage(msgStream pb.AuctionService_ProcessMessageServer) error {
 	msg, err := msgStream.Recv()
 
@@ -101,9 +109,17 @@ func (s *AuctionServiceServer) incrLamport(msg *pb.Message) {
 }
 
 func (s *AuctionServiceServer) ProcessBid(msg *pb.Message) {
-	if msg.Message {
-		s.HighestBidAmount = msg.Message
+	var bid int
+	bid, _ = fmt.Sscanf(msg.Message, "%d")
+
+	if bid > s.HighestBid {
+		s.HighestBid = bid
 		s.HighestBidder = msg.Sender
+		// Then send these values to the backup servers
+		// send acknowledgement that the bid was successful
+	} else {
+		// send acknowledgement that the bid was unsuccessful
+		// send the highest bid amount to the client
 	}
 }
 
@@ -112,6 +128,26 @@ func (s *AuctionServiceServer) ProcessTokenReq() {
 }
 
 func main() {
+	f := setLog()
+	defer f.Close()
+
+	if len(os.Args) < 4 {
+		fmt.Sprintf("The port argument needs to be a viable port.")
+	}
+
+	serverId := os.Args[2]
+
+	fmt.Println("--- EEPY AUCTION --")
+
+	var opts []grpc.ServerOption
+	grpcServer := grpc.NewServer(opts...)
+	pb.RegisterAuctionServiceServer(grpcServer, &AuctionServiceServer{
+		ServerChannels: make(map[string][]chan *pb.Message),
+		Lamport:        0,
+	})
+
+	fmt.Printf("Server started at Lamport time: %v\n", 0)
+	log.Printf("Server started at Lamport time: %v\n", 0)
 
 }
 
