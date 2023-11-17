@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+option go_package = "./auctionpb";
+
+package auctionpb;
+
+service AuctionService {
+    rpc JoinAuction(Channel) returns (stream Message) {}
+}
+
+message Channel {
+    string name = 1;
+    string userName = 2;
+
+}
+
+message Message {
+    string sender = 1;
+    Channel channel = 2;
+    string message = 3;
+    int32 timestamp = 4;
+}
+
+message MessageAck {
+    string status = 1;
+}
