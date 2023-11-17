@@ -1,17 +1,17 @@
 syntax = "proto3";
 
-option go_package = "./auctionpb";
+option go_package = "https://github.com/eepyITU/Replication/tree/kreasAttempt/Proto";
 
 package auctionpb;
 
 service AuctionService {
     rpc JoinAuction(Channel) returns (stream Message) {}
+    rpc ProcessMessage(stream Message) returns (MessageAck) {}
 }
 
 message Channel {
     string name = 1;
     string userName = 2;
-
 }
 
 message Message {
