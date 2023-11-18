@@ -2,9 +2,11 @@ package main
 
 import (
 	pb "Replication/AuctionSystem/Proto"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 
 	"google.golang.org/grpc"
@@ -13,6 +15,7 @@ import (
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	Leadertoken    bool
+	ServerId       int
 	ClientChannels map[string][]chan *pb.Message
 	ServerChannels map[string][]chan *pb.Message
 	Lamport        int32
@@ -91,10 +94,16 @@ func (s *AuctionServiceServer) ProcessMessage(msgStream pb.AuctionService_Proces
 		return err
 	}
 
+	if msg.GetMessage() == "token" {
+		s.ProcessTokenReq()
+	} else if isNumeric(msg.GetMessage()) {
+		s.ProcessBid(msg)
+	}
+
 	ack := pb.MessageAck{Status: "Sent"}
 	msgStream.SendAndClose(&ack)
 
-	s.sendMsgToClients()
+	s.sendMsgToClients(msg)
 
 	return nil
 }
@@ -127,33 +136,50 @@ func (s *AuctionServiceServer) ProcessTokenReq() {
 
 }
 
+var serverId int = *flag.Int("id", 0, "server id")
+var serverPort string = *flag.String("port", ":808", "server port")
+
 func main() {
 	f := setLog()
 	defer f.Close()
 
-	if len(os.Args) < 4 {
-		fmt.Sprintf("The port argument needs to be a viable port.")
-	}
+	flag.Parse()
 
-	serverId := os.Args[2]
+	leadertoken := serverId == 0
+	serverPort = fmt.Sprintf(":%v", 8080+serverId)
+
+	lis, err := net.Listen("tcp", serverPort)
+
+	if err != nil {
+		log.Fatalf("Failed to listen on port %v: %v", serverPort, err)
+	}
 
 	fmt.Println("--- EEPY AUCTION --")
 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterAuctionServiceServer(grpcServer, &AuctionServiceServer{
+		ServerId:       serverId,
+		Leadertoken:    leadertoken,
 		ServerChannels: make(map[string][]chan *pb.Message),
+		ClientChannels: make(map[string][]chan *pb.Message),
 		Lamport:        0,
 	})
 
-	fmt.Printf("Server started at Lamport time: %v\n", 0)
-	log.Printf("Server started at Lamport time: %v\n", 0)
+	print := fmt.Sprintf("Server, %v started at Lamport time: %v\n", serverId, 0)
 
+	fmt.Print(print)
+	log.Print(print)
+
+	grpcServer.Serve(lis)
 }
 
 func setLog() *os.File {
 	// Clears the log.txt file when a new server is started
-	if _, err := os.Open("Server.txt"); err == nil {
+	// But... what if we have multiple servers running at the same time?
+	_, err := os.Open("Server.txt")
+
+	if err == nil {
 		if err := os.Truncate("Server.txt", 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)
 		}
