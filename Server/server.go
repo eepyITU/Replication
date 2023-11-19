@@ -185,10 +185,11 @@ func main() {
 		log.Print(print)
 	}
 
-	//TODO: Add a way to ping the other servers to see if they are up and running
+	// [ ] Add a way to ping the other servers to see if they are up and running
 
 }
 
+// [ ] Clean up this shit
 func pingServer(wg *sync.WaitGroup, address string) {
 	log.Println("Pinging server:", address)
 	defer wg.Done()
