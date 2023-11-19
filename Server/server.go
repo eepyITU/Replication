@@ -2,25 +2,30 @@ package main
 
 import (
 	pb "Replication/AuctionSystem/Proto"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"os"
+	"sync"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	Leadertoken    bool
-	ServerId       int
 	ClientChannels map[string][]chan *pb.Message
-	ServerChannels map[string][]chan *pb.Message
-	Lamport        int32
-	HighestBid     int
-	HighestBidder  string
+	//ServerChannels map[string][]chan *pb.Message
+	Lamport       int32
+	HighestBid    int
+	HighestBidder string
 }
 
 func (s *AuctionServiceServer) JoinAuction(ch *pb.Channel, msgStream pb.AuctionService_JoinAuctionServer) error {
@@ -136,8 +141,11 @@ func (s *AuctionServiceServer) ProcessTokenReq() {
 
 }
 
-var serverId int = *flag.Int("id", 0, "server id")
-var serverPort string = *flag.String("port", ":808", "server port")
+func GeneratePortNum() int {
+	return (rand.Intn(1000) + 4000)
+}
+
+var serverPortNum = flag.Int("port", 1, "The port number of the server")
 
 func main() {
 	f := setLog()
@@ -145,13 +153,16 @@ func main() {
 
 	flag.Parse()
 
-	leadertoken := serverId == 0
-	serverPort = fmt.Sprintf(":%v", 8080+serverId)
+	var lis net.Listener
+	err := errors.New("Hasn't been initiated yet")
 
-	lis, err := net.Listen("tcp", serverPort)
-
-	if err != nil {
-		log.Fatalf("Failed to listen on port %v: %v", serverPort, err)
+	if *serverPortNum == 1 {
+		for err != nil && *serverPortNum < 100 {
+			*serverPortNum = GeneratePortNum()
+			log.Println("Attempting server startup on port:", *serverPortNum)
+			serverPort := fmt.Sprintf(":%v", *serverPortNum)
+			lis, err = net.Listen("tcp", serverPort)
+		}
 	}
 
 	fmt.Println("--- EEPY AUCTION --")
@@ -159,19 +170,43 @@ func main() {
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterAuctionServiceServer(grpcServer, &AuctionServiceServer{
-		ServerId:       serverId,
-		Leadertoken:    leadertoken,
-		ServerChannels: make(map[string][]chan *pb.Message),
 		ClientChannels: make(map[string][]chan *pb.Message),
 		Lamport:        0,
+		HighestBid:     0,
+		HighestBidder:  "No one yet.",
 	})
 
-	print := fmt.Sprintf("Server, %v started at Lamport time: %v\n", serverId, 0)
+	print := fmt.Sprintf("Server-startup success on %v at Lamport time: %v\n", lis.Addr(), 0)
 
-	fmt.Print(print)
-	log.Print(print)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("Failed to serve: %v", err)
+	} else {
+		fmt.Print(print)
+		log.Print(print)
+	}
 
-	grpcServer.Serve(lis)
+	//TODO: Add a way to ping the other servers to see if they are up and running
+
+}
+
+func pingServer(wg *sync.WaitGroup, address string) {
+	log.Println("Pinging server:", address)
+	defer wg.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	if err != nil {
+		return
+	}
+
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+			log.Fatalf("Could not close connection")
+		}
+	}(conn)
 }
 
 func setLog() *os.File {
