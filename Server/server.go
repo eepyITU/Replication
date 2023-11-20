@@ -22,10 +22,10 @@ type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	Leadertoken    bool
 	ClientChannels map[string][]chan *pb.Message
-	//ServerChannels map[string][]chan *pb.Message
-	Lamport       int32
-	HighestBid    int
-	HighestBidder string
+	ServerChannels map[string][]chan *pb.Message
+	Lamport        int32
+	HighestBid     int
+	HighestBidder  string
 }
 
 func (s *AuctionServiceServer) JoinAuction(ch *pb.Channel, msgStream pb.AuctionService_JoinAuctionServer) error {
@@ -171,6 +171,7 @@ func main() {
 	grpcServer := grpc.NewServer(opts...)
 	pb.RegisterAuctionServiceServer(grpcServer, &AuctionServiceServer{
 		ClientChannels: make(map[string][]chan *pb.Message),
+		ServerChannels: make(map[string][]chan *pb.Message),
 		Lamport:        0,
 		HighestBid:     0,
 		HighestBidder:  "No one yet.",
@@ -187,10 +188,16 @@ func main() {
 
 	// [ ] Add a way to ping the other servers to see if they are up and running
 
+	count := 0
+	waitg := sync.WaitGroup{}
+	for count < 100 {
+		address := fmt.Sprintf("localhost:%v", 4000+count)
+		if time.Second < 30 && pingServer(&waitg, address) == true {
+			s.ServerChannels[address] =	}
 }
 
 // [ ] Clean up this shit
-func pingServer(wg *sync.WaitGroup, address string) {
+func pingServer(wg *sync.WaitGroup, address string) bool {
 	log.Println("Pinging server:", address)
 	defer wg.Done()
 
@@ -199,7 +206,7 @@ func pingServer(wg *sync.WaitGroup, address string) {
 
 	conn, err := grpc.DialContext(ctx, address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
-		return
+		return true
 	}
 
 	defer func(conn *grpc.ClientConn) {
