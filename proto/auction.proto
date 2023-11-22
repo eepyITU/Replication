@@ -3,7 +3,7 @@
 
 syntax = "proto3";
 
-option go_package = "https://github.com/Haruyzal/uni/tree/main/DSYS/ChittyChat/proto";
+option go_package = "https://github.com/eepyITU/Replication/tree/leaderlessAttempt/proto";
 
 package proto;
 
@@ -15,7 +15,7 @@ package proto;
 
 // SendMessage: Sends msg to channel, returns MessageAck for ack.
 
-service ChatService {
+service AuctionService {
 	rpc JoinChannel(Channel) returns (stream Message) {}
 	rpc SendMessage(stream Message) returns (MessageAck) {}
 }

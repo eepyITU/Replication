@@ -1,7 +1,7 @@
 package main
 
 import (
-	pb "ChittyChat/proto"
+	pb "Replication/proto"
 	"fmt"
 	"io"
 	"log"
@@ -16,16 +16,17 @@ import (
 // A channel repr. our single client connected to the channel.
 // Pointers are used to comm. between rpc calls JoinChannel and SendMessage.
 
-type chatServiceServer struct {
-	pb.UnimplementedChatServiceServer
+type AuctionServiceServer struct {
+	pb.UnimplementedAuctionServiceServer
 	channel map[string][]chan *pb.Message
 	Lamport int32 // Remote timestamp; keeps local time for newly joined users
+	ownPort int
 }
 
 // JoinChannel function is called when a client joins a server.
 // When a client joins a server, we createn a channel for the client, and add the chan to the map.
 
-func (s *chatServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.ChatService_JoinChannelServer) error {
+func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionService_JoinChannelServer) error {
 
 	// Create a channel for the client
 	clientChannel := make(chan *pb.Message)
@@ -40,7 +41,7 @@ func (s *chatServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.ChatService
 		case <-msgStream.Context().Done():
 
 			//leaveString := fmt.Sprintf("%v has left the channel", ch.GetSendersName())
-			leaveString := fmt.Sprintf("Participant %v has left the Chitty-Chat at Lamport time %v", ch.GetSendersName(), s.Lamport)
+			leaveString := fmt.Sprintf("Participant %v has left the Auction at Lamport time %v", ch.GetSendersName(), s.Lamport)
 
 			// Remove the clientChannel from the slice of channels for this channel
 			s.removeChannel(ch, clientChannel)
@@ -71,7 +72,7 @@ func (s *chatServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.ChatService
 // AKA this is where the serever receives a message from a client's stream that the other clients shall receive.
 // When a client sends a message, we send the message to the channel.
 
-func (s *chatServiceServer) SendMessage(msgStream pb.ChatService_SendMessageServer) error {
+func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessageServer) error {
 
 	// Receive message from client
 	msg, err := msgStream.Recv()
@@ -102,7 +103,7 @@ func (s *chatServiceServer) SendMessage(msgStream pb.ChatService_SendMessageServ
 }
 
 // Function to increase server's Lamport timestamp; used after receiving a message
-func (s *chatServiceServer) incrLamport(msg *pb.Message) {
+func (s *AuctionServiceServer) incrLamport(msg *pb.Message) {
 	if msg.GetTimestamp() > s.Lamport {
 		s.Lamport = msg.GetTimestamp() + 1
 	} else {
@@ -112,7 +113,7 @@ func (s *chatServiceServer) incrLamport(msg *pb.Message) {
 }
 
 // Function to remove the channel from the map after the client has left
-func (s *chatServiceServer) removeChannel(ch *pb.Channel, currClientChannel chan *pb.Message) {
+func (s *AuctionServiceServer) removeChannel(ch *pb.Channel, currClientChannel chan *pb.Message) {
 	channels := s.channel[ch.Name]
 	for i, channel := range channels {
 		if channel == currClientChannel {
@@ -123,12 +124,12 @@ func (s *chatServiceServer) removeChannel(ch *pb.Channel, currClientChannel chan
 }
 
 // Function to send message to all clients in the channel
-func (s *chatServiceServer) sendMsgToClients(msg *pb.Message) {
+func (s *AuctionServiceServer) sendMsgToClients(msg *pb.Message) {
 	s.incrLamport(msg)
 
 	go func() {
 		if msg.Message == "9cbf281b855e41b4ad9f97707efdd29d" {
-			msg.Message = fmt.Sprintf("Participant %v joined Chitty-Chat at Lamport time %v", msg.GetSender(), msg.GetTimestamp()-2)
+			msg.Message = fmt.Sprintf("Participant %v joined the Auction at Lamport time %v", msg.GetSender(), msg.GetTimestamp()-2)
 			fmt.Println("Received at Lamport time %v: %v", msg.GetTimestamp(), msg.GetMessage())
 			log.Println("Received at Lamport time %v: %v", msg.GetTimestamp(), msg.GetMessage())
 		} else {
@@ -158,11 +159,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to listen on port 8080: %v", err)
 	}
-	fmt.Println("--- CHITTY CHAT ---")
+	fmt.Println("--- EEPY AUCTION ---")
 
 	var opts []grpc.ServerOption
 	grpcServer := grpc.NewServer(opts...)
-	pb.RegisterChatServiceServer(grpcServer, &chatServiceServer{
+	pb.RegisterAuctionServiceServer(grpcServer, &AuctionServiceServer{
 		channel: make(map[string][]chan *pb.Message),
 		//Remote timestamp
 		Lamport: 0,
