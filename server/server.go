@@ -11,20 +11,11 @@ import (
 	"google.golang.org/grpc"
 )
 
-// Struct contains a map of channels and a mutex to protect it.
-// It stores the chan pointers contained in a single channel.
-// A channel repr. our single client connected to the channel.
-// Pointers are used to comm. between rpc calls JoinChannel and SendMessage.
-
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	channel map[string][]chan *pb.Message
 	Lamport int32 // Remote timestamp; keeps local time for newly joined users
-	ownPort int
 }
-
-// JoinChannel function is called when a client joins a server.
-// When a client joins a server, we createn a channel for the client, and add the chan to the map.
 
 func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionService_JoinChannelServer) error {
 
@@ -93,12 +84,8 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	ack := pb.MessageAck{Status: "Sent"}
 	msgStream.SendAndClose(&ack)
 
-	s.sendMsgToClients(msg)
+	//s.sendMsgToClients(msg)
 
-	// Return nil to indicate success
-	// This is required by the protobuf compiler
-	// If we don't return nil, the protobuf compiler will throw an error
-	// saying that the function doesn't return anything
 	return nil
 }
 
@@ -154,6 +141,7 @@ func main() {
 	// Sets the logger to use a log.txt file instead of the console
 	f := setLog()
 	defer f.Close()
+
 	lis, err := net.Listen("tcp", ":8080")
 
 	if err != nil {

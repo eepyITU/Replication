@@ -1,7 +1,7 @@
 package main
 
 import (
-	pb "ChittyChat/proto"
+	pb "Replication/proto"
 	"bufio"
 	"context"
 	"flag"
@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -18,13 +19,16 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func joinChannel(ctx context.Context, client pb.ChatServiceClient) { //, Lamport int) {
+var serverPorts []string
+var addServerPortsLock sync.Mutex
+
+func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
 
 	channel := pb.Channel{Name: *channelName, SendersName: *senderName}
 	f := setLog(*senderName)
 	defer f.Close()
 	stream, err := client.JoinChannel(ctx, &channel)
-	
+
 	if err != nil {
 		log.Fatalf("client.JoinChannel(ctx, &channel) throws: %v", err)
 	}
@@ -45,7 +49,7 @@ func joinChannel(ctx context.Context, client pb.ChatServiceClient) { //, Lamport
 			// The stream closes when the client disconnects from the server, or vice versa
 			// So if err == io.EOF, the stream is closed
 			// If the stream is closed, close() is called on the waitc channel
-			// Causeing <-waitc to exit, thus ending the joinChannel func
+			// Causing <-waitc to exit, thus ending the joinChannel func
 			if err == io.EOF {
 				close(waitc)
 				return
@@ -60,7 +64,7 @@ func joinChannel(ctx context.Context, client pb.ChatServiceClient) { //, Lamport
 			messageFormat := "Received at " + formatClientMessage(incoming)
 
 			if *senderName == incoming.GetSender() {
-				if incoming.GetMessage() != fmt.Sprintf("Participant %v joined Chitty-Chat at Lamport time %v", incoming.GetSender(), incoming.GetTimestamp()-3) {
+				if incoming.GetMessage() != fmt.Sprintf("Participant %v joined Auction at Lamport time %v", incoming.GetSender(), incoming.GetTimestamp()-3) {
 					clearPreviousConsoleLine()
 				}
 				log.Print(messageFormat)
@@ -76,7 +80,7 @@ func joinChannel(ctx context.Context, client pb.ChatServiceClient) { //, Lamport
 
 }
 
-func sendMessage(ctx context.Context, client pb.ChatServiceClient, message string) { //, Lamport int) {
+func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message string) { //, Lamport int) {
 	stream, err := client.SendMessage(ctx)
 	if err != nil {
 		log.Printf("Cannot send message - Error: %v", err)
@@ -135,16 +139,62 @@ func formatClientMessage(incoming *pb.Message) string {
 }
 
 func printWelcome() {
-	fmt.Println("\n ━━━━━⊱⊱ ⋆  CHITTY CHAT ⋆ ⊰⊰━━━━━")
+	fmt.Println("\n ━━━━━⊱⊱ ⋆  AUCTION HOUSE ⋆ ⊰⊰━━━━━")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Welcome to " + *channelName)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Your username's " + *senderName)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
 }
 
-var channelName = flag.String("channel", "Eepy", "Channel name for chatting")
-var senderName = flag.String("username", "Anon", "Sender's name")
-var tcpServer = flag.String("server", ":8080", "Tcp server")
+func findServerPorts() {
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(80)
+	start := 8000
 
+	for i := 0; i < 81; i++ {
+		go pingServer(&waitGroup, fmt.Sprintf(":%v", start+i))
+	}
+	waitGroup.Wait()
+}
+
+func pingServer(waitGroup *sync.WaitGroup, connectionString string) {
+	defer waitGroup.Done()
+
+	log.Println("Pinging server: ", connectionString)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(ctx, connectionString, grpc.WithInsecure(), grpc.WithBlock())
+	if err != nil {
+		return
+	}
+
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+			log.Fatalf("Connection refused to close.")
+		}
+	}(conn)
+
+	c := pb.NewAuctionServiceClient(conn)
+	go joinChannel(ctx, c)
+
+	if err == nil {
+		addServerPort(connectionString)
+	}
+}
+
+func addServerPort(portConnectionString string) {
+	addServerPortsLock.Lock()
+	log.Println("Adding %v to client's known servers", portConnectionString)
+	defer addServerPortsLock.Unlock()
+	serverPorts = append(serverPorts, portConnectionString)
+}
+
+var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
+var senderName = flag.String("username", "Anon", "Sender's name")
+
+// var tcpServerPort = flag.Int("server", 8000, "Tcp server")
 var Lamport int32 = 0
 
 func main() {
@@ -165,7 +215,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	client := pb.NewChatServiceClient(conn)
+	client := pb.NewAuctionServiceClient(conn)
 
 	defer conn.Close()
 
@@ -186,20 +236,21 @@ func main() {
 	}
 }
 
-    // sets the logger to use a log.txt file instead of the console
-    func setLog(name string) *os.File {
-        // Clears the log.txt file when a new server is started
-		
-		if _,err := os.Open(fmt.Sprintf("%s.txt",name)); err == nil {
-        if err := os.Truncate(fmt.Sprintf("%s.txt",name), 0); err != nil {
-            log.Printf("Failed to truncate: %v", err)
-        }}
+// sets the logger to use a log.txt file instead of the console
+func setLog(name string) *os.File {
+	// Clears the log.txt file when a new server is started
 
-        // This connects to the log file/changes the output of the log information to the log.txt file.
-        f, err := os.OpenFile(fmt.Sprintf("%s.txt",name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-        if err != nil {
-            log.Fatalf("error opening file: %v", err)
-        }
-        log.SetOutput(f)
-        return f
-    }
+	if _, err := os.Open(fmt.Sprintf("%s.txt", name)); err == nil {
+		if err := os.Truncate(fmt.Sprintf("%s.txt", name), 0); err != nil {
+			log.Printf("Failed to truncate: %v", err)
+		}
+	}
+
+	// This connects to the log file/changes the output of the log information to the log.txt file.
+	f, err := os.OpenFile(fmt.Sprintf("%s.txt", name), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	log.SetOutput(f)
+	return f
+}
