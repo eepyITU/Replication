@@ -115,6 +115,7 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 	fmt.Printf("Message  %v \n", ack)
 	// The prev. line is cleared, so that sent messages is not printed twice for the client
 	clearPreviousConsoleLine()
+	
 }
 
 // Function to increment the client's Lamport timestamp; used after receiving a message
@@ -175,7 +176,7 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string) {
 			log.Fatalf("Connection refused to close.")
 		}
 	}(conn)
-
+	// No defer conn close???
 	c := pb.NewAuctionServiceClient(conn)
 	go joinChannel(ctx, c)
 
@@ -205,23 +206,26 @@ func main() {
 	flag.Parse()
 
 	printWelcome()
+	
+	findServerPorts()
 
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	conn, err := grpc.Dial(*tcpServer, opts...)
+	//var opts []grpc.DialOption
+	//opts = append(opts, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+	/*conn, err := grpc.Dial(*tcpServer, opts...)
 	if err != nil {
 		log.Fatalf("Fail to dial: %v", err)
-	}
+	}*/
 
-	ctx := context.Background()
+	/*ctx := context.Background()
 	client := pb.NewAuctionServiceClient(conn)
 
-	defer conn.Close()
+	defer conn.Close()*/
 
-	go joinChannel(ctx, client)
+	//go joinChannel(ctx, client)
 
-	scanner := bufio.NewScanner(os.Stdin)
+	/*scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		message := scanner.Text()
 		if !utf8.ValidString(message) {
@@ -233,7 +237,7 @@ func main() {
 			continue
 		}
 		go sendMessage(ctx, client, message)
-	}
+	}*/
 }
 
 // sets the logger to use a log.txt file instead of the console
@@ -254,3 +258,8 @@ func setLog(name string) *os.File {
 	log.SetOutput(f)
 	return f
 }
+
+
+// Step 1: Clients finds server ports by pinging all possible ports
+// Step 2: Clients Join channel on all available serverports
+// 
