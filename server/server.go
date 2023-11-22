@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 
 	"google.golang.org/grpc"
 )
@@ -15,6 +16,7 @@ type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	channel map[string][]chan *pb.Message
 	Lamport int32 // Remote timestamp; keeps local time for newly joined users
+	CurrentHighestBid int32
 }
 
 func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionService_JoinChannelServer) error {
@@ -79,14 +81,34 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	if err != nil {
 		return err
 	}
-
+	var ack pb.MessageAck
+	// Check if message is a result, if its isnt it must be a bid.
+	if msg.GetMessage() == "result"{
+		ack = pb.MessageAck{Status: string(s.CurrentHighestBid)}
+	}else{
+		// check if message is integer
+		if s.validBid(msg.GetMessage()) {
+			ack = pb.MessageAck{Status: "Bid Accepted"} 
+		}else{
+			ack = pb.MessageAck{Status: "Bid Rejected"}
+		}	
+	}
 	// Acknowledge message received to client
-	ack := pb.MessageAck{Status: "Sent"}
 	msgStream.SendAndClose(&ack)
 
 	//s.sendMsgToClients(msg)
 
 	return nil
+}
+
+// Check whether or not the given client message in an integer (and therefore a bid.)
+func (s *AuctionServiceServer) validBid(msg string) bool {
+	Bid, err := strconv.Atoi(msg)
+	if err != nil {
+		fmt.Println("Error: " + err.Error())
+		return false
+	}
+	return Bid > int(s.CurrentHighestBid)
 }
 
 // Function to increase server's Lamport timestamp; used after receiving a message

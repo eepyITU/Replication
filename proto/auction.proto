@@ -42,4 +42,5 @@ message Message {
 
 message MessageAck {
 	string status = 1;
+	int32 bid = 2;
 }
