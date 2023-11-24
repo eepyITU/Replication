@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"slices"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -35,11 +36,8 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 
 	// Send the join message to the server
 	sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
-	// Channel that waits for the stream to close
-	// So when <-waitc is called, it waits for an empty struct to be sent
-	// This is to ensure that joinChannel doesn't exit before the stream's closed
-	waitc := make(chan struct{})
 
+	waitc := make(chan struct{})
 	go func() {
 		// The for loop is an infinite loop: Won't ever exit unless stream is closed
 		for {
@@ -91,15 +89,7 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 	Lamport++
 
 	// Create message
-	msg := pb.Message{
-		Channel: &pb.Channel{
-			Name:        *channelName,
-			SendersName: *senderName},
-		Message: message,
-		Sender:  *senderName,
-		//Local Timestamp
-		Timestamp: Lamport,
-	}
+	msg := formatMessage(message)
 
 	// Send message to server via stream
 	stream.Send(&msg)
@@ -113,9 +103,17 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 
 	log.Printf("Message  %v \n", ack)
 	fmt.Printf("Message  %v \n", ack)
-	// The prev. line is cleared, so that sent messages is not printed twice for the client
-	clearPreviousConsoleLine()
-	
+}
+
+func sendMessageToAllServers(ctx context.Context, message string) {
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(len(serverPorts))
+
+	for _, port := range serverPorts {
+		go pingServer(&waitGroup, port, message)
+	}
+
+	waitGroup.Wait()
 }
 
 // Function to increment the client's Lamport timestamp; used after receiving a message
@@ -152,12 +150,12 @@ func findServerPorts() {
 	start := 8000
 
 	for i := 0; i < 81; i++ {
-		go pingServer(&waitGroup, fmt.Sprintf(":%v", start+i))
+		go pingServer(&waitGroup, fmt.Sprintf(":%v", start+i), "")
 	}
 	waitGroup.Wait()
 }
 
-func pingServer(waitGroup *sync.WaitGroup, connectionString string) {
+func pingServer(waitGroup *sync.WaitGroup, connectionString string, message string) {
 	defer waitGroup.Done()
 
 	log.Println("Pinging server: ", connectionString)
@@ -165,7 +163,7 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, connectionString, grpc.WithInsecure(), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, connectionString, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		return
 	}
@@ -173,23 +171,56 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string) {
 	defer func(conn *grpc.ClientConn) {
 		err := conn.Close()
 		if err != nil {
-			log.Fatalf("Connection refused to close.")
+			log.Fatalf("Connection refused to close. Soz mate.")
 		}
 	}(conn)
 	// No defer conn close???
+	// - But isn't it line 162-163?
+	// - So defer conn close is called when
+	// - grpc.DialContext returns an error
+	// - (AKA when the server is not found)
+	// - Recall we're only calling pingServer to ports 8000-8080
+
 	c := pb.NewAuctionServiceClient(conn)
-	go joinChannel(ctx, c)
 
 	if err == nil {
-		addServerPort(connectionString)
+		if slices.Contains(serverPorts, connectionString) {
+			go sendMessage(ctx, c, message)
+		} else {
+			go joinChannel(ctx, c)
+			addServerPort(connectionString)
+		}
+	}
+}
+
+func formatMessage(message string) pb.Message {
+	return pb.Message{
+		Channel: &pb.Channel{
+			Name:        *channelName,
+			SendersName: *senderName},
+		Message:   message,
+		Sender:    *senderName,
+		Timestamp: Lamport,
 	}
 }
 
 func addServerPort(portConnectionString string) {
 	addServerPortsLock.Lock()
-	log.Println("Adding %v to client's known servers", portConnectionString)
+	log.Printf("Adding %v to client's known servers\n", portConnectionString)
 	defer addServerPortsLock.Unlock()
 	serverPorts = append(serverPorts, portConnectionString)
+}
+
+func foreverScanForInputAndSend() {
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		message := scanner.Text()
+		if !utf8.ValidString(message) {
+			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
+			continue
+		}
+		go sendMessageToAllServers(context.Background(), message)
+	}
 }
 
 var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
@@ -199,45 +230,16 @@ var senderName = flag.String("username", "Anon", "Sender's name")
 var Lamport int32 = 0
 
 func main() {
+	// Cosmetics
 	screen.Clear()
 	screen.MoveTopLeft()
 	time.Sleep(time.Second / 60)
 
+	// Actual initilization
 	flag.Parse()
-
 	printWelcome()
-	
 	findServerPorts()
-
-
-	//var opts []grpc.DialOption
-	//opts = append(opts, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
-
-	/*conn, err := grpc.Dial(*tcpServer, opts...)
-	if err != nil {
-		log.Fatalf("Fail to dial: %v", err)
-	}*/
-
-	/*ctx := context.Background()
-	client := pb.NewAuctionServiceClient(conn)
-
-	defer conn.Close()*/
-
-	//go joinChannel(ctx, client)
-
-	/*scanner := bufio.NewScanner(os.Stdin)
-	for scanner.Scan() {
-		message := scanner.Text()
-		if !utf8.ValidString(message) {
-			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
-			continue
-		}
-		if len(message) > 128 {
-			fmt.Printf("\n[Brevity is the soul of wit.]\n[Please keep your message under 128 characters.]\n\n")
-			continue
-		}
-		go sendMessage(ctx, client, message)
-	}*/
+	foreverScanForInputAndSend()
 }
 
 // sets the logger to use a log.txt file instead of the console
@@ -259,7 +261,6 @@ func setLog(name string) *os.File {
 	return f
 }
 
-
 // Step 1: Clients finds server ports by pinging all possible ports
 // Step 2: Clients Join channel on all available serverports
-// 
+//
