@@ -38,20 +38,12 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 		log.Fatalf("client.JoinChannel(ctx, &channel) throws: %v", err)
 	}
 
-	// Send the join message to the server
 	sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
 
 	waitc := make(chan struct{})
 	go func() {
-		// The for loop is an infinite loop: Won't ever exit unless stream is closed
 		for {
-			// Receive message from stream and store it in incoming and possible error in err
 			incoming, err := stream.Recv()
-
-			// The stream closes when the client disconnects from the server, or vice versa
-			// So if err == io.EOF, the stream is closed
-			// If the stream is closed, close() is called on the waitc channel
-			// Causing <-waitc to exit, thus ending the joinChannel func
 			if err == io.EOF {
 				close(waitc)
 				return
@@ -114,7 +106,7 @@ func sendMessageToAllServers(ctx context.Context, message string) {
 	waitGroup.Wait()
 }
 
-// Function to increment the client's Lamport timestamp; used after receiving a message
+// Used after receiving a message
 func incrLamport(msg *pb.Message) {
 	if msg.GetTimestamp() > Lamport {
 		Lamport = msg.GetTimestamp() + 1
@@ -267,7 +259,6 @@ var formattedSenderName = fmt.Sprint("Anon " + rand.Int(1000) + "" + rand.Int(10
 var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
 var senderName = flag.String("username", formattedSenderName, "Sender's name")
 
-// var tcpServerPort = flag.Int("server", 8000, "Tcp server")
 var Lamport int32 = 0
 
 func main() {
@@ -283,10 +274,7 @@ func main() {
 	foreverScanForInputAndSend()
 }
 
-// sets the logger to use a log.txt file instead of the console
 func setLog(name string) *os.File {
-	// Clears the log.txt file when a new server is started
-
 	if _, err := os.Open(fmt.Sprintf("%s.txt", name)); err == nil {
 		if err := os.Truncate(fmt.Sprintf("%s.txt", name), 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)
