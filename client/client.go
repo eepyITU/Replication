@@ -4,10 +4,12 @@ import (
 	pb "Replication/proto"
 	"bufio"
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"slices"
 	"sync"
@@ -22,6 +24,8 @@ import (
 
 var serverPorts []string
 var changeServerPortsLock sync.Mutex
+var helpMenuCommand = "/h"
+
 
 func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
 
@@ -131,13 +135,6 @@ func formatClientMessage(incoming *pb.Message) string {
 	return fmt.Sprintf("Lamport time: %v\n[%v]: %v\n\n", incoming.GetTimestamp(), incoming.GetSender(), incoming.GetMessage())
 }
 
-func printWelcome() {
-	fmt.Println("\n ━━━━━⊱⊱ ⋆  AUCTION HOUSE ⋆ ⊰⊰━━━━━")
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ Welcome to " + *channelName)
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ Your username's " + *senderName)
-	fmt.Printf("\n⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
-}
-
 func findServerPorts() {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(80)
@@ -238,12 +235,37 @@ func foreverScanForInputAndSend() {
 			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
 			continue
 		}
+
+		lowercaseInput := strings.ToLower(message)
+
+		if strings.TrimSpace(lowercaseInput) == helpMenuCommand {
+			printHelpMessage()
+			continue
+		}
 		go sendMessageToAllServers(context.Background(), message)
 	}
 }
 
+func printWelcome() {
+	fmt.Println("\n ━━━━━⊱⊱ ⋆  AUCTION HOUSE ⋆ ⊰⊰━━━━━")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ Welcome to " + *channelName)
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ Your username's " + *senderName)
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
+	fmt.Printf("\n⋆｡˚ ☁︎ ˚｡ Enjoy the auction! \n\n")
+}
+
+func printHelpMessage() {
+	fmt.Println("\n ━━━━━⊱⊱ ⋆  THE HELP MENU ⋆ ⊰⊰━━━━━")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To bid, type an integer or decimal number and press enter")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 or 420.69")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type /r")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type /help")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
+}
+
+var formattedSenderName = fmt.Sprint("Anon " + rand.Int(1000) + "" + rand.Int(1000)
 var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
-var senderName = flag.String("username", "Anon", "Sender's name")
+var senderName = flag.String("username", formattedSenderName, "Sender's name")
 
 // var tcpServerPort = flag.Int("server", 8000, "Tcp server")
 var Lamport int32 = 0
