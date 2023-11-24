@@ -21,7 +21,7 @@ import (
 )
 
 var serverPorts []string
-var addServerPortsLock sync.Mutex
+var changeServerPortsLock sync.Mutex
 
 func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
 
@@ -54,7 +54,7 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 			}
 
 			if err != nil {
-				log.Fatalf("Failed to receive message from channel joining. \nError: %v", err)
+				log.Fatalf("Failed to receive message from client joining. \nError: %v", err)
 			}
 
 			incrLamport(incoming)
@@ -85,24 +85,18 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 		fmt.Printf("Cannot send message - Error: %v", err)
 	}
 
-	// Increase Lamport timestamp before sending
 	Lamport++
-
-	// Create message
 	msg := formatMessage(message)
-
-	// Send message to server via stream
 	stream.Send(&msg)
 
-	// CloseAndRecv() closes the stream and returns the server's response, an ack
 	ack, err := stream.CloseAndRecv()
 	if err != nil {
 		log.Printf("Cannot send message - Error: %v", err)
 		fmt.Printf("Cannot send message - Error: %v", err)
 	}
 
-	log.Printf("Message  %v \n", ack)
-	fmt.Printf("Message  %v \n", ack)
+	log.Println("Message ", ack)
+	fmt.Println("Message ", ack)
 }
 
 func sendMessageToAllServers(ctx context.Context, message string) {
@@ -141,7 +135,7 @@ func printWelcome() {
 	fmt.Println("\n ━━━━━⊱⊱ ⋆  AUCTION HOUSE ⋆ ⊰⊰━━━━━")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Welcome to " + *channelName)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Your username's " + *senderName)
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
+	fmt.Printf("\n⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
 }
 
 func findServerPorts() {
@@ -165,6 +159,8 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string, message stri
 
 	conn, err := grpc.DialContext(ctx, connectionString, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
+		log.Printf("Failed to dial server: %v", err)
+		removeServerPort(connectionString)
 		return
 	}
 
@@ -205,10 +201,33 @@ func formatMessage(message string) pb.Message {
 }
 
 func addServerPort(portConnectionString string) {
-	addServerPortsLock.Lock()
+	changeServerPortsLock.Lock()
 	log.Printf("Adding %v to client's known servers\n", portConnectionString)
-	defer addServerPortsLock.Unlock()
+	defer changeServerPortsLock.Unlock()
+
+	lengthServerPorts := len(serverPorts)
 	serverPorts = append(serverPorts, portConnectionString)
+
+	if len(serverPorts) == lengthServerPorts+1 {
+		log.Printf("Successfully added %v to client's known servers\n", portConnectionString)
+	} else {
+		log.Printf("Failed to add %v to client's known servers\n", portConnectionString)
+	}
+}
+
+func removeServerPort(portConnectionString string) {
+	changeServerPortsLock.Lock()
+	log.Printf("Removing %v from client's known servers\n", portConnectionString)
+	defer changeServerPortsLock.Unlock()
+
+	lengthServerPorts := len(serverPorts)
+	serverPorts = append(serverPorts[:lengthServerPorts], serverPorts[lengthServerPorts-1:]...)
+
+	if len(serverPorts) == lengthServerPorts-1 {
+		log.Printf("Successfully removed %v from client's known servers\n", portConnectionString)
+	} else {
+		log.Printf("Failed to remove %v from client's known servers\n", portConnectionString)
+	}
 }
 
 func foreverScanForInputAndSend() {

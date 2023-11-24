@@ -14,8 +14,8 @@ import (
 
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
-	channel map[string][]chan *pb.Message
-	Lamport int32 // Remote timestamp; keeps local time for newly joined users
+	channel           map[string][]chan *pb.Message
+	Lamport           int32 // Remote timestamp; keeps local time for newly joined users
 	CurrentHighestBid int32
 }
 
@@ -83,15 +83,15 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	}
 	var ack pb.MessageAck
 	// Check if message is a result, if its isnt it must be a bid.
-	if msg.GetMessage() == "result"{
+	if msg.GetMessage() == "result" {
 		ack = pb.MessageAck{Status: string(s.CurrentHighestBid)}
-	}else{
+	} else {
 		// check if message is integer
 		if s.validBid(msg.GetMessage()) {
-			ack = pb.MessageAck{Status: "Bid Accepted"} 
-		}else{
+			ack = pb.MessageAck{Status: "Bid Accepted"}
+		} else {
 			ack = pb.MessageAck{Status: "Bid Rejected"}
-		}	
+		}
 	}
 	// Acknowledge message received to client
 	msgStream.SendAndClose(&ack)
@@ -139,12 +139,14 @@ func (s *AuctionServiceServer) sendMsgToClients(msg *pb.Message) {
 	go func() {
 		if msg.Message == "9cbf281b855e41b4ad9f97707efdd29d" {
 			msg.Message = fmt.Sprintf("Participant %v joined the Auction at Lamport time %v", msg.GetSender(), msg.GetTimestamp()-2)
-			fmt.Println("Received at Lamport time %v: %v", msg.GetTimestamp(), msg.GetMessage())
-			log.Println("Received at Lamport time %v: %v", msg.GetTimestamp(), msg.GetMessage())
+
+			print := fmt.Sprintf("Received at Lamport time %v: %v", msg.GetTimestamp(), msg.GetMessage())
+			fmt.Println(print)
+			log.Println(print)
 		} else {
-			formattedMessage := formatMessage(msg)
-			log.Printf("Received at " + formattedMessage)
-			fmt.Printf("Received at " + formattedMessage)
+			formattedMessage := fmt.Sprintf("Received at " + formatMessage(msg))
+			log.Println(formattedMessage)
+			fmt.Println(formattedMessage)
 		}
 
 		streams := s.channel[msg.Channel.Name]
@@ -156,7 +158,7 @@ func (s *AuctionServiceServer) sendMsgToClients(msg *pb.Message) {
 
 // Function to format message to be printed to the server
 func formatMessage(msg *pb.Message) string {
-	return fmt.Sprintf("Lamport time: %v [%v]: %v\n", msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
+	return fmt.Sprintf("Lamport time: %v [%v]: %v", msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
 }
 
 func main() {
