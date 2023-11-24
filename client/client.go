@@ -25,6 +25,7 @@ import (
 var serverPorts []string
 var changeServerPortsLock sync.Mutex
 var helpMenuCommand = "/h"
+var resultCommand = "/r"
 
 
 func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
@@ -219,21 +220,36 @@ func removeServerPort(portConnectionString string) {
 	}
 }
 
+func isNumeric(msg string) bool {
+	var number int
+	_, err := fmt.Sscanf(msg, "%d", &number)
+	return err == nil
+}
+
+func trimAndLowercaseMsg(message string) string {
+	return strings.TrimSpace(strings.ToLower(message))
+}
+
 func foreverScanForInputAndSend() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		message := scanner.Text()
+		message := trimAndLowercaseMsg(strings.scanner.Text())
+
 		if !utf8.ValidString(message) {
 			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
 			continue
 		}
 
-		lowercaseInput := strings.ToLower(message)
-
-		if strings.TrimSpace(lowercaseInput) == helpMenuCommand {
+		if message == helpMenuCommand {
 			printHelpMessage()
 			continue
 		}
+
+		if message != resultCommand || message != helpMenuCommand || !isNumeric(message) {
+			fmt.Printf("\n[Invalid input.]\n[Please type %v to see the help menu.]\n\n", helpMenuCommand)
+			continue
+		}
+
 		go sendMessageToAllServers(context.Background(), message)
 	}
 }
@@ -250,8 +266,8 @@ func printHelpMessage() {
 	fmt.Println("\n ━━━━━⊱⊱ ⋆  THE HELP MENU ⋆ ⊰⊰━━━━━")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To bid, type an integer or decimal number and press enter")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 or 420.69")
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type /r")
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type /help")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type " + resultCommand)
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
 }
 
