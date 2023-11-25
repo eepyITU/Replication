@@ -259,13 +259,13 @@ func printWelcome() {
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Welcome to " + *channelName)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ Your username's " + *senderName)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
-	fmt.Printf("\n⋆｡˚ ☁︎ ˚｡ Enjoy the auction! \n\n")
+	fmt.Printf("⋆｡˚ ☁︎ ˚｡ Enjoy the auction! \n\n")
 }
 
 func printHelpMessage() {
 	fmt.Println("\n ━━━━━⊱⊱ ⋆  THE HELP MENU ⋆ ⊰⊰━━━━━")
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To bid, type an integer or decimal number and press enter")
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 or 420.69")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To bid, type an integer and press enter")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 (press enter)")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type " + resultCommand)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
@@ -273,7 +273,7 @@ func printHelpMessage() {
 
 var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
 var formattedSenderName = fmt.Sprintf("Anon %v", randomInt)
-var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
+var channelName = flag.String("channel", "Eepy Auction", "Channel name for bidding")
 var senderName = flag.String("username", formattedSenderName, "Sender's name")
 
 var Lamport int32 = 0

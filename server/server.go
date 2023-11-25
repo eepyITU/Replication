@@ -2,9 +2,12 @@ package main
 
 import (
 	pb "Replication/proto"
+	"crypto/rand"
+	"flag"
 	"fmt"
 	"io"
 	"log"
+	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -34,7 +37,7 @@ func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionS
 		case <-msgStream.Context().Done():
 
 			//leaveString := fmt.Sprintf("%v has left the channel", ch.GetSendersName())
-			leaveString := fmt.Sprintf("Participant %v has left the Auction at Lamport time %v", ch.GetSendersName(), s.Lamport)
+			//leaveString := fmt.Sprintf("Participant %v has left the Auction at Lamport time %v", ch.GetSendersName(), s.Lamport)
 
 			// Remove the clientChannel from the slice of channels for this channel
 			s.removeChannel(ch, clientChannel)
@@ -43,9 +46,9 @@ func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionS
 			//s.Lamport++
 
 			// Send a message to every client in the channel that a client has left
-			msg := &pb.Message{Sender: ch.Name, Message: leaveString, Channel: ch, Timestamp: s.Lamport}
+			//msg := &pb.Message{Sender: ch.Name, Message: leaveString, Channel: ch, Timestamp: s.Lamport}
 
-			s.sendMsgToClients(msg)
+			//s.sendMsgToClients(msg)
 
 			// closes the function by returning nil.
 			return nil
@@ -83,7 +86,7 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	}
 	var ack pb.MessageAck
 	// Check if message is a result, if its isnt it must be a bid.
-	if msg.GetMessage() == "result" {
+	if msg.GetMessage() == "/r" {
 		ack = pb.MessageAck{Status: string(s.CurrentHighestBid)}
 	} else {
 		// check if message is integer
@@ -161,16 +164,24 @@ func formatMessage(msg *pb.Message) string {
 	return fmt.Sprintf("Lamport time: %v [%v]: %v", msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
 }
 
+var randomInt, err = rand.Int(rand.Reader, big.NewInt(80))
+var serverPort = flag.String("port", fmt.Sprintf(":80%v", randomInt), "The server port")
+
 func main() {
 	// Sets the logger to use a log.txt file instead of the console
 	f := setLog()
 	defer f.Close()
 
-	lis, err := net.Listen("tcp", ":8080")
+	flag.Parse()
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":80%v", randomInt))
 
 	if err != nil {
-		log.Fatalf("Failed to listen on port 8080: %v", err)
+		print := fmt.Sprintf("Failed to listen on port %v: %v", serverPort, err)
+		log.Fatalf(print)
+		fmt.Printf(print)
 	}
+
 	fmt.Println("--- EEPY AUCTION ---")
 
 	var opts []grpc.ServerOption
@@ -181,8 +192,9 @@ func main() {
 		Lamport: 0,
 	})
 
-	fmt.Printf("Server started at Lamport time: %v\n", 0)
-	log.Printf("Server started at Lamport time: %v\n", 0)
+	print := fmt.Sprintf("Server started at port %v Lamport time: %v\n", lis.Addr().String(), 0)
+	fmt.Printf(print)
+	log.Printf(print)
 
 	grpcServer.Serve(lis)
 }
