@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
+	"math/big"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -26,7 +27,6 @@ var serverPorts []string
 var changeServerPortsLock sync.Mutex
 var helpMenuCommand = "/h"
 var resultCommand = "/r"
-
 
 func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
 
@@ -233,7 +233,7 @@ func trimAndLowercaseMsg(message string) string {
 func foreverScanForInputAndSend() {
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		message := trimAndLowercaseMsg(strings.scanner.Text())
+		message := trimAndLowercaseMsg(scanner.Text())
 
 		if !utf8.ValidString(message) {
 			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
@@ -271,7 +271,8 @@ func printHelpMessage() {
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
 }
 
-var formattedSenderName = fmt.Sprint("Anon " + rand.Int(1000) + "" + rand.Int(1000)
+var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
+var formattedSenderName = fmt.Sprintf("Anon %v", randomInt)
 var channelName = flag.String("channel", "Eepy's Auction", "Channel name for bidding")
 var senderName = flag.String("username", formattedSenderName, "Sender's name")
 
