@@ -160,12 +160,7 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string, message stri
 			log.Fatalf("Connection refused to close. Soz mate.")
 		}
 	}(conn)
-	// No defer conn close???
-	// - But isn't it line 162-163?
-	// - So defer conn close is called when
-	// - grpc.DialContext returns an error
-	// - (AKA when the server is not found)
-	// - Recall we're only calling pingServer to ports 8000-8080
+	// No defer conn close???*/
 
 	c := pb.NewAuctionServiceClient(conn)
 
@@ -174,7 +169,7 @@ func pingServer(waitGroup *sync.WaitGroup, connectionString string, message stri
 			go sendMessage(ctx, c, message)
 		} else {
 			go joinChannel(ctx, c)
-			addServerPort(connectionString)
+			go addServerPort(connectionString)
 		}
 	}
 }
@@ -287,8 +282,8 @@ func main() {
 	// Actual initilization
 	flag.Parse()
 	printWelcome()
-	findServerPorts()
-	foreverScanForInputAndSend()
+	go findServerPorts()
+	go foreverScanForInputAndSend()
 }
 
 func setLog(name string) *os.File {
