@@ -2,12 +2,10 @@ package main
 
 import (
 	pb "Replication/proto"
-	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
 	"net"
 	"os"
 	"strconv"
@@ -97,12 +95,15 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	} else {
 		// check if message is integer && higher than current highest bid
 		if s.validBid(msg.GetMessage()) {
+
 			// Convert string to int32
 			num, err := strconv.ParseInt(msg.GetMessage(), 10, 32)
 			if err != nil {
 				log.Fatalf("Error parsing bid to int32: %v", err)
 			}
+			// Set new highest bid and bidder
 			s.CurrentHighestBid = int32(num)
+			s.HighestBidder = msg.GetSender()
 
 			ack = pb.MessageAck{Status: fmt.Sprintf("Accepted: %v", msg.GetMessage())}
 		} else {
@@ -179,9 +180,12 @@ func formatMessage(msg *pb.Message) string {
 	return fmt.Sprintf("Lamport time: %v [%v]: %v", msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
 }
 
-var randomInt, err = rand.Int(rand.Reader, big.NewInt(80))
-var serverPort = flag.String("port", fmt.Sprintf(":80%v", randomInt), "The server port")
+// [ ] Add a flag to set the log file name
+var serverPort = flag.String("port", fmt.Sprintf(":8080"), "The server port")
+var timeLimit = flag.Int("time", 90, "The auction time limit in seconds")
 
+// [ ] Ensure an auction time limit
+// [ ] Ensure a crash simulation of the server
 func main() {
 	// Sets the logger to use a log.txt file instead of the console
 	f := setLog()
@@ -189,7 +193,7 @@ func main() {
 
 	flag.Parse()
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":80%v", randomInt))
+	lis, err := net.Listen("tcp", *serverPort)
 
 	if err != nil {
 		print := fmt.Sprintf("Failed to listen on port %v: %v", serverPort, err)
