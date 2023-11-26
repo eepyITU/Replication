@@ -13,11 +13,9 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	cursor "atomicgo.dev/cursor"
-	"github.com/inancgumus/screen"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -51,23 +49,15 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 			}
 
 			if err != nil {
-				log.Fatalf("Failed to receive message from client joining. \nError: %v", err)
+				log.Fatalf("Failed to receive message from server. \nError: %v", err)
 			}
 
 			incrLamport(incoming)
 
-			messageFormat := "Received at " + formatClientMessage(incoming)
-
-			if *senderName == incoming.GetSender() {
-				if incoming.GetMessage() != fmt.Sprintf("Participant %v joined Auction at Lamport time %v", incoming.GetSender(), incoming.GetTimestamp()-3) {
-					clearPreviousConsoleLine()
-				}
-				log.Print(messageFormat)
-				fmt.Print(messageFormat)
-			} else {
-				log.Print(messageFormat)
-				fmt.Print(messageFormat)
-			}
+			//messageFormat := "Received at " + formatClientMessage(incoming)
+			//print := incoming.GetMessage()
+			//log.Println(print)
+			//fmt.Println(print)
 		}
 	}()
 
@@ -77,6 +67,7 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 
 func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message string) { //, Lamport int) {
 	stream, err := client.SendMessage(ctx)
+
 	if err != nil {
 		log.Printf("Cannot send message - Error: %v", err)
 		fmt.Printf("Cannot send message - Error: %v", err)
@@ -92,13 +83,16 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 		fmt.Printf("Cannot send message - Error: %v", err)
 	}
 
-	log.Println("Message ", ack)
-	fmt.Println("Message ", ack)
+	log.Println("Bid", ack)
+	fmt.Println("Bid", ack)
 }
 
 func sendMessageToAllServers(ctx context.Context, message string) {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(len(serverPorts))
+
+	// Debug print-stm lol
+	//fmt.Printf("Sending message to %v servers\n", len(serverConns))
 
 	for _, conn := range serverConns {
 		sendMessage(ctx, pb.NewAuctionServiceClient(conn), message)
@@ -130,10 +124,11 @@ func formatClientMessage(incoming *pb.Message) string {
 
 func findServerPorts() {
 	if *serverPortsFlag != "" {
-		serverPorts = strings.Split(*serverPortsFlag, ",")
+		serverPortsSplit := strings.Split(*serverPortsFlag, ",")
 
-		for _, port := range serverPorts {
-			addServerPort(port)
+		for _, port := range serverPortsSplit {
+			connectionString := fmt.Sprint(":", port)
+			addServerPort(connectionString)
 		}
 
 	} else {
@@ -150,24 +145,27 @@ func connectToServers() {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	for _, port := range serverPorts {
+	for i := 0; i < len(serverPorts); i++ {
+		log.Println("Dialing server", serverPorts[i])
+		conn, err := grpc.Dial(serverPorts[i], opts...)
 
-		for i := 0; i < 3; i++ {
-			i, err := grpc.Dial(serverPorts[i], opts...)
-
-			if err != nil {
-				print := fmt.Sprintf("Fail to Dial : %v \n", err)
-				fmt.Printf(print)
-				log.Printf(print)
-				return
-			}
-
-			serverConns = append(serverConns, i)
-
-			print := fmt.Sprintf("Successfully connected to port ", port)
+		if err != nil {
+			print := fmt.Sprintf("Fail to Dial : %v \n", err)
+			//fmt.Printf(print)
 			log.Println(print)
-			fmt.Println(print)
+		} else {
+			serverConns = append(serverConns, conn)
+
+			print := fmt.Sprint("Successfully connected to port ", serverPorts[i])
+			log.Println(print)
+			//fmt.Println(print)
 		}
+	}
+
+	for _, conn := range serverConns {
+		log.Println("Connecting to server...")
+		client := pb.NewAuctionServiceClient(conn)
+		go joinChannel(context.Background(), client)
 	}
 }
 
@@ -233,11 +231,14 @@ func foreverScanForInputAndSend() {
 		} else if message == helpMenuCommand {
 			printHelpMessage()
 			continue
-		} else if message != resultCommand || message != helpMenuCommand || !isNumeric(message) {
-			fmt.Printf("\n[Invalid input.]\n[Please type %v to see the help menu.]\n\n", helpMenuCommand)
-			continue
-		} else {
+		} else if message == resultCommand || isNumeric(message) {
+			clearPreviousConsoleLine()
+			fmt.Print("\n[", *senderName, "]: ", message)
 			go sendMessageToAllServers(context.Background(), message)
+			fmt.Print("\n")
+		} else {
+			fmt.Printf("\n[Invalid input: %v]\n[Please type %v to see the help menu.]\n\n", message, helpMenuCommand)
+			continue
 		}
 	}
 }
@@ -256,7 +257,7 @@ func printHelpMessage() {
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 (press enter)")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type " + resultCommand)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n\n")
+	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n")
 }
 
 var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
@@ -269,13 +270,15 @@ var Lamport int32 = 0
 
 func main() {
 	// Cosmetics
-	screen.Clear()
+	/*screen.Clear()
 	screen.MoveTopLeft()
-	time.Sleep(time.Second / 60)
+	time.Sleep(time.Second / 60)*/
 
 	// Actual initilization
 	flag.Parse()
+	fmt.Print("\n")
 	findServerPorts()
+	connectToServers()
 	printWelcome()
 	foreverScanForInputAndSend()
 }

@@ -15,11 +15,14 @@ import (
 	"google.golang.org/grpc"
 )
 
+var resultCommand = "/r"
+
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	channel           map[string][]chan *pb.Message
 	Lamport           int32 // Remote timestamp; keeps local time for newly joined users
 	CurrentHighestBid int32
+	HighestBidder     string
 }
 
 func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionService_JoinChannelServer) error {
@@ -56,9 +59,11 @@ func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionS
 		// if a client sends a message, incr! :D Since server has RECEIVED a msg
 		case msg := <-clientChannel:
 
-			//s.incrLamport(msg)
+			s.incrLamport(msg)
 
-			// stream sends the message to client
+			fmt.Println("Message received from client: " + msg.GetMessage())
+
+			// stream sends the message to SendMessage function
 			msgStream.Send(msg)
 		}
 	}
@@ -85,17 +90,26 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 		return err
 	}
 	var ack pb.MessageAck
-	// Check if message is a result, if its isnt it must be a bid.
-	if msg.GetMessage() == "/r" {
-		ack = pb.MessageAck{Status: string(s.CurrentHighestBid)}
+	// Check if message is a result request, if its isnt it must be a bid.
+	// This is possible as the client will only send a result req. or a bid.
+	if msg.GetMessage() == resultCommand {
+		ack = pb.MessageAck{Status: fmt.Sprintf("Current Bid: %v", s.CurrentHighestBid)}
 	} else {
-		// check if message is integer
+		// check if message is integer && higher than current highest bid
 		if s.validBid(msg.GetMessage()) {
-			ack = pb.MessageAck{Status: "Bid Accepted"}
+			// Convert string to int32
+			num, err := strconv.ParseInt(msg.GetMessage(), 10, 32)
+			if err != nil {
+				log.Fatalf("Error parsing bid to int32: %v", err)
+			}
+			s.CurrentHighestBid = int32(num)
+
+			ack = pb.MessageAck{Status: fmt.Sprintf("Accepted: %v", msg.GetMessage())}
 		} else {
-			ack = pb.MessageAck{Status: "Bid Rejected"}
+			ack = pb.MessageAck{Status: fmt.Sprint("Rejected. Current Bid: ", s.CurrentHighestBid)}
 		}
 	}
+
 	// Acknowledge message received to client
 	msgStream.SendAndClose(&ack)
 
@@ -111,6 +125,7 @@ func (s *AuctionServiceServer) validBid(msg string) bool {
 		fmt.Println("Error: " + err.Error())
 		return false
 	}
+
 	return Bid > int(s.CurrentHighestBid)
 }
 
@@ -202,6 +217,7 @@ func main() {
 // sets the logger to use a log.txt file instead of the console
 func setLog() *os.File {
 	// Clears the log.txt file when a new server is started
+	// [ ] Ensure a unique log for each server so that the log is not overwritten
 	if _, err := os.Open("Server.txt"); err == nil {
 		if err := os.Truncate("Server.txt", 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)
