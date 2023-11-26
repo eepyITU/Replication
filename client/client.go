@@ -11,7 +11,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -24,6 +23,7 @@ import (
 )
 
 var serverPorts []string
+var serverConns []*grpc.ClientConn
 var changeServerPortsLock sync.Mutex
 var helpMenuCommand = "/h"
 var resultCommand = "/r"
@@ -39,7 +39,7 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 		log.Fatalf("client.JoinChannel(ctx, &channel) throws: %v", err)
 	}
 
-	sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
+	//sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
 
 	waitc := make(chan struct{})
 	go func() {
@@ -100,8 +100,8 @@ func sendMessageToAllServers(ctx context.Context, message string) {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(len(serverPorts))
 
-	for _, port := range serverPorts {
-		go pingServer(&waitGroup, port, message)
+	for _, conn := range serverConns {
+		sendMessage(ctx, pb.NewAuctionServiceClient(conn), message)
 	}
 
 	waitGroup.Wait()
@@ -129,47 +129,44 @@ func formatClientMessage(incoming *pb.Message) string {
 }
 
 func findServerPorts() {
-	var waitGroup sync.WaitGroup
-	waitGroup.Add(80)
-	start := 8000
+	if *serverPortsFlag != "" {
+		serverPorts = strings.Split(*serverPortsFlag, ",")
 
-	for i := 0; i < 81; i++ {
-		go pingServer(&waitGroup, fmt.Sprintf(":%v", start+i), "")
+		for _, port := range serverPorts {
+			addServerPort(port)
+		}
+
+	} else {
+		print := fmt.Sprintf("No server ports provided")
+		log.Fatalln(print)
+		fmt.Println(print)
 	}
-	waitGroup.Wait()
 }
 
-func pingServer(waitGroup *sync.WaitGroup, connectionString string, message string) {
-	defer waitGroup.Done()
+func connectToServers() {
 
-	log.Println("Pinging server: ", connectionString)
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	conn, err := grpc.DialContext(ctx, connectionString, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	if err != nil {
-		log.Printf("Failed to dial server: %v", err)
-		removeServerPort(connectionString)
-		return
+	opts := []grpc.DialOption{
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	defer func(conn *grpc.ClientConn) {
-		err := conn.Close()
-		if err != nil {
-			log.Fatalf("Connection refused to close. Soz mate.")
-		}
-	}(conn)
-	// No defer conn close???*/
+	for _, port := range serverPorts {
 
-	c := pb.NewAuctionServiceClient(conn)
+		for i := 0; i < 3; i++ {
+			i, err := grpc.Dial(serverPorts[i], opts...)
 
-	if err == nil {
-		if slices.Contains(serverPorts, connectionString) {
-			go sendMessage(ctx, c, message)
-		} else {
-			go joinChannel(ctx, c)
-			go addServerPort(connectionString)
+			if err != nil {
+				print := fmt.Sprintf("Fail to Dial : %v \n", err)
+				fmt.Printf(print)
+				log.Printf(print)
+				return
+			}
+
+			serverConns = append(serverConns, i)
+
+			print := fmt.Sprintf("Successfully connected to port ", port)
+			log.Println(print)
+			fmt.Println(print)
 		}
 	}
 }
@@ -233,19 +230,15 @@ func foreverScanForInputAndSend() {
 		if !utf8.ValidString(message) {
 			fmt.Printf("\n[Invalid characters.]\n[Please ensure your message is UTF-8 encoded.]\n\n")
 			continue
-		}
-
-		if message == helpMenuCommand {
+		} else if message == helpMenuCommand {
 			printHelpMessage()
 			continue
-		}
-
-		if message != resultCommand || message != helpMenuCommand || !isNumeric(message) {
+		} else if message != resultCommand || message != helpMenuCommand || !isNumeric(message) {
 			fmt.Printf("\n[Invalid input.]\n[Please type %v to see the help menu.]\n\n", helpMenuCommand)
 			continue
+		} else {
+			go sendMessageToAllServers(context.Background(), message)
 		}
-
-		go sendMessageToAllServers(context.Background(), message)
 	}
 }
 
@@ -270,6 +263,7 @@ var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
 var formattedSenderName = fmt.Sprintf("Anon %v", randomInt)
 var channelName = flag.String("channel", "Eepy Auction", "Channel name for bidding")
 var senderName = flag.String("username", formattedSenderName, "Sender's name")
+var serverPortsFlag = flag.String("serverports", "", "Comma seperated list of server ports")
 
 var Lamport int32 = 0
 
@@ -281,9 +275,9 @@ func main() {
 
 	// Actual initilization
 	flag.Parse()
+	findServerPorts()
 	printWelcome()
-	go findServerPorts()
-	go foreverScanForInputAndSend()
+	foreverScanForInputAndSend()
 }
 
 func setLog(name string) *os.File {
