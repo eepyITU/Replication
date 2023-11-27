@@ -18,16 +18,20 @@ import (
 
 	cursor "atomicgo.dev/cursor"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 var serverPorts []string
 var serverConns []*grpc.ClientConn
 var changeServerPortsLock sync.Mutex
+var changeServerConnsLock sync.Mutex
 var helpMenuCommand = "/h"
 var resultCommand = "/r"
+var currentIndexToRemove = 0
 
-func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamport int) {
+func joinChannel(ctx context.Context, client pb.AuctionServiceClient, port string) { //, Lamport int) {
 
 	channel := pb.Channel{Name: *channelName, SendersName: *senderName}
 	f := setLog(*senderName)
@@ -35,7 +39,7 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 	stream, err := client.JoinChannel(ctx, &channel)
 
 	if err != nil {
-		log.Fatalf("client.JoinChannel(ctx, &channel) throws: %v", err)
+		log.Printf("client.JoinChannel(ctx, &channel) throws: %v\n", err)
 	}
 
 	//sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
@@ -48,8 +52,13 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 				close(waitc)
 				return
 			}
-
 			if err != nil {
+				if status.Code(err) == codes.Unavailable {
+					log.Printf("Connection lost with the server: %v", err)
+					removeServerPort(port)
+					removeServerConn()
+					return
+				}
 				log.Fatalf("Failed to receive message from server. \nError: %v", err)
 			}
 
@@ -67,11 +76,16 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient) { //, Lamp
 }
 
 func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message string) { //, Lamport int) {
+	if client == nil {
+		log.Println("Client is nil, cannot send message")
+		return
+	}
 	stream, err := client.SendMessage(ctx)
 
 	if err != nil {
 		log.Printf("Cannot send message - Error: %v", err)
 		fmt.Printf("Cannot send message - Error: %v", err)
+		return
 	}
 
 	Lamport++
@@ -80,8 +94,8 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 
 	ack, err := stream.CloseAndRecv()
 	if err != nil {
-		log.Printf("Cannot send message - Error: %v", err)
-		fmt.Printf("Cannot send message - Error: %v", err)
+		log.Printf("Cannot receive message - Error: %v", err)
+		fmt.Printf("Cannot receive message - Error: %v", err)
 	}
 
 	log.Println("Bid", ack)
@@ -110,9 +124,10 @@ func sendMessageToAllServers(ctx context.Context, message string) {
 	//fmt.Printf("Sending message to %v servers\n", len(serverConns))
 
 	for _, conn := range serverConns {
-		sendMessage(ctx, pb.NewAuctionServiceClient(conn), message)
+		if conn != nil {
+			sendMessage(ctx, pb.NewAuctionServiceClient(conn), message)
+		}
 	}
-
 	waitGroup.Wait()
 }
 
@@ -174,13 +189,11 @@ func connectToServers() {
 			print := fmt.Sprint("Successfully connected to port ", serverPorts[i])
 			log.Println(print)
 			//fmt.Println(print)
-		}
-	}
 
-	for _, conn := range serverConns {
-		log.Println("Connecting to server...")
-		client := pb.NewAuctionServiceClient(conn)
-		go joinChannel(context.Background(), client)
+			log.Println("Connecting to server...")
+			client := pb.NewAuctionServiceClient(conn)
+			go joinChannel(context.Background(), client, serverPorts[i])
+		}
 	}
 }
 
@@ -210,18 +223,47 @@ func addServerPort(portConnectionString string) {
 	}
 }
 
+// [ ] fix ur shitty remove methods bruv
+
 func removeServerPort(portConnectionString string) {
 	changeServerPortsLock.Lock()
-	log.Printf("Removing %v from client's known servers\n", portConnectionString)
+	log.Printf("Removing port %v from client's known servers\n", portConnectionString)
 	defer changeServerPortsLock.Unlock()
 
-	lengthServerPorts := len(serverPorts)
-	serverPorts = append(serverPorts[:lengthServerPorts], serverPorts[lengthServerPorts-1:]...)
+	for i, port := range serverPorts {
+		if port == portConnectionString {
+			// Remove the port from the slice
+			currentIndexToRemove = i
+			serverPorts = append(serverPorts[:i], serverPorts[i+1:]...)
+			break
+		}
+	}
+	// Check if the port was removed
+	for _, port := range serverPorts {
+		if port == portConnectionString {
+			log.Printf("Failed to remove %v from client's known servers\n", portConnectionString)
+			return
+		}
+	}
+	log.Printf("Successfully removed %v from client's known servers\n", portConnectionString)
+}
 
-	if len(serverPorts) == lengthServerPorts-1 {
-		log.Printf("Successfully removed %v from client's known servers\n", portConnectionString)
+func removeServerConn() {
+	changeServerConnsLock.Lock()
+	log.Printf("Removing a conn from client's known servers\n")
+	defer changeServerConnsLock.Unlock()
+
+	lengthServerConns := len(serverConns)
+	if currentIndexToRemove < len(serverConns)-1 {
+		serverConns = append(serverConns[:currentIndexToRemove], serverConns[currentIndexToRemove+1:]...)
 	} else {
-		log.Printf("Failed to remove %v from client's known servers\n", portConnectionString)
+		serverConns = serverConns[:currentIndexToRemove]
+	}
+
+	if len(serverConns) == lengthServerConns-1 {
+		log.Printf("Successfully removed a conn from client's known servers\n")
+	} else {
+		log.Printf("Failed to remove a conn from client's known servers\n")
 	}
 }
 

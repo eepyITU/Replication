@@ -18,6 +18,7 @@ var resultCommand = "/r"
 var timeLimitCountdownStarted = false
 var timeLimitReached = false
 var auctionStopsAt = time.Now().Local()
+var serverCrashesAt = time.Now().Local()
 
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
@@ -79,7 +80,6 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	}
 	var ack pb.MessageAck
 
-	// [ ] Make a check to see if auction time limit has been reached
 	log.Println("3: Auction stops at: " + auctionStopsAt.Format("15:04:05"))
 	if timeLimitReached == false {
 		// Check if message is a result request, if its isnt it must be a bid.
@@ -177,7 +177,6 @@ func formatMessage(msg *pb.Message) string {
 }
 
 func setAuctionTimelimit() {
-	// [ ] Ensure an auction time limit using the flag timeLimit
 
 	log.Println()
 
@@ -195,11 +194,9 @@ func setAuctionTimelimit() {
 	}
 }
 
-// [ ] Add a flag to set the log file name
 var serverPort = flag.Int("port", 8080, "The server port")
 var timeLimitDuration = flag.Int("time", 120, "The auction time limit in seconds")
 
-// [ ] Ensure a crash simulation of the server
 func main() {
 	// Sets the logger to use a log.txt file instead of the console
 	f := setLog()
@@ -226,7 +223,7 @@ func main() {
 		Lamport: 0,
 	})
 
-	print := fmt.Sprintf("Server started at port %v Lamport time: %v\n", lis.Addr().String(), 0)
+	print := fmt.Sprintf("Server started at port %v Lamport time: %v\nTo simulate a crash, please press CTRL + C", lis.Addr().String(), 0)
 	fmt.Print(print)
 	log.Print(print)
 	grpcServer.Serve(lis)
@@ -237,7 +234,6 @@ var serverTextName = fmt.Sprintf("Server%v.txt", serverPort)
 // sets the logger to use a log.txt file instead of the console
 func setLog() *os.File {
 	// Clears the log.txt file when a new server is started
-	// [ ] Ensure a unique log for each server so that the log is not overwritten
 	if _, err := os.Open(serverTextName); err == nil {
 		if err := os.Truncate(serverTextName, 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)
