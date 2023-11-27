@@ -11,6 +11,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -85,6 +86,20 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 
 	log.Println("Bid", ack)
 	fmt.Println("Bid", ack)
+
+	intMessage, err := strconv.Atoi(message)
+	bidstring := fmt.Sprint(ack.Bid)
+	if err == nil {
+		if ack.Bid > int32(intMessage) {
+			// If bid is rejected send the highest bid from ack to all servers (to keep stale data away shuu shuu (〃￣ω￣〃ゞ)
+			sendMessageToAllServers(ctx, bidstring)
+		}
+
+	} else {
+		print := "Could not convert big message to integer"
+		log.Println(print)
+		fmt.Println(print)
+	}
 }
 
 func sendMessageToAllServers(ctx context.Context, message string) {
