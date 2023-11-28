@@ -23,7 +23,7 @@ var serverCrashesAt = time.Now().Local()
 type AuctionServiceServer struct {
 	pb.UnimplementedAuctionServiceServer
 	channel           map[string][]chan *pb.Message
-	Lamport           int32 // Remote timestamp; keeps local time for newly joined users
+	Lamport           int32
 	CurrentHighestBid int32
 	HighestBidder     string
 }
@@ -57,10 +57,6 @@ func (s *AuctionServiceServer) JoinChannel(ch *pb.Channel, msgStream pb.AuctionS
 		}
 	}
 }
-
-// SendMessage function is called when a client sends a message.
-// AKA this is where the server receives a message from a client's stream that the other clients shall receive.
-// When a client sends a message, we send the message to the channel.
 
 func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessageServer) error {
 	setAuctionTimelimit()
@@ -118,8 +114,6 @@ func (s *AuctionServiceServer) SendMessage(msgStream pb.AuctionService_SendMessa
 	// Acknowledge message received to client
 	msgStream.SendAndClose(&ack)
 
-	//s.sendMsgToClients(msg)
-
 	return nil
 }
 
@@ -153,27 +147,6 @@ func (s *AuctionServiceServer) removeChannel(ch *pb.Channel, currClientChannel c
 			break
 		}
 	}
-}
-
-// Function to send message to all clients in the channel
-func (s *AuctionServiceServer) sendMsgToClients(msg *pb.Message) {
-	s.incrLamport(msg)
-
-	go func() {
-		formattedMessage := fmt.Sprintf("Received at " + formatMessage(msg))
-		log.Println(formattedMessage)
-		fmt.Println(formattedMessage)
-
-		streams := s.channel[msg.Channel.Name]
-		for _, clientChan := range streams {
-			clientChan <- msg
-		}
-	}()
-}
-
-// Function to format message to be printed to the server
-func formatMessage(msg *pb.Message) string {
-	return fmt.Sprintf("Lamport time: %v [%v]: %v", msg.GetTimestamp(), msg.GetSender(), msg.GetMessage())
 }
 
 func setAuctionTimelimit() {
@@ -229,11 +202,10 @@ func main() {
 	grpcServer.Serve(lis)
 }
 
-var serverTextName = fmt.Sprintf("Server%v.txt", serverPort)
+var serverTextName = fmt.Sprintf("Server%v.txt", *serverPort)
 
 // sets the logger to use a log.txt file instead of the console
 func setLog() *os.File {
-	// Clears the log.txt file when a new server is started
 	if _, err := os.Open(serverTextName); err == nil {
 		if err := os.Truncate(serverTextName, 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)

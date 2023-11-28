@@ -42,8 +42,6 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient, port strin
 		log.Printf("client.JoinChannel(ctx, &channel) throws: %v\n", err)
 	}
 
-	//sendMessage(ctx, client, "9cbf281b855e41b4ad9f97707efdd29d")
-
 	waitc := make(chan struct{})
 	go func() {
 		for {
@@ -63,11 +61,6 @@ func joinChannel(ctx context.Context, client pb.AuctionServiceClient, port strin
 			}
 
 			incrLamport(incoming)
-
-			//messageFormat := "Received at " + formatClientMessage(incoming)
-			//print := incoming.GetMessage()
-			//log.Println(print)
-			//fmt.Println(print)
 		}
 	}()
 
@@ -105,7 +98,7 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 	bidstring := fmt.Sprint(ack.Bid)
 	if err == nil {
 		if ack.Bid > int32(intMessage) {
-			// If bid is rejected send the highest bid from ack to all servers (to keep stale data away shuu shuu (〃￣ω￣〃ゞ)
+			// If bid is rejected: Send the highest bid from ack to all servers (to keep stale data away shuu shuu (〃￣ω￣〃ゞ)
 			sendMessageToAllServers(ctx, bidstring)
 		}
 
@@ -119,9 +112,6 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 func sendMessageToAllServers(ctx context.Context, message string) {
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(len(serverPorts))
-
-	// Debug print-stm lol
-	//fmt.Printf("Sending message to %v servers\n", len(serverConns))
 
 	for _, conn := range serverConns {
 		if conn != nil {
@@ -181,14 +171,12 @@ func connectToServers() {
 
 		if err != nil {
 			print := fmt.Sprintf("Fail to Dial : %v \n", err)
-			//fmt.Printf(print)
 			log.Println(print)
 		} else {
 			serverConns = append(serverConns, conn)
 
 			print := fmt.Sprint("Successfully connected to port ", serverPorts[i])
 			log.Println(print)
-			//fmt.Println(print)
 
 			log.Println("Connecting to server...")
 			client := pb.NewAuctionServiceClient(conn)
@@ -223,8 +211,6 @@ func addServerPort(portConnectionString string) {
 	}
 }
 
-// [ ] fix ur shitty remove methods bruv
-
 func removeServerPort(portConnectionString string) {
 	changeServerPortsLock.Lock()
 	log.Printf("Removing port %v from client's known servers\n", portConnectionString)
@@ -238,7 +224,7 @@ func removeServerPort(portConnectionString string) {
 			break
 		}
 	}
-	// Check if the port was removed
+
 	for _, port := range serverPorts {
 		if port == portConnectionString {
 			log.Printf("Failed to remove %v from client's known servers\n", portConnectionString)
@@ -321,16 +307,11 @@ var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
 var formattedSenderName = fmt.Sprintf("Anon %v", randomInt)
 var channelName = flag.String("channel", "Eepy Auction", "Channel name for bidding")
 var senderName = flag.String("username", formattedSenderName, "Sender's name")
-var serverPortsFlag = flag.String("serverports", "", "Comma seperated list of server ports")
+var serverPortsFlag = flag.String("ports", "", "Comma seperated list of server ports")
 
 var Lamport int32 = 0
 
 func main() {
-	// Cosmetics
-	/*screen.Clear()
-	screen.MoveTopLeft()
-	time.Sleep(time.Second / 60)*/
-
 	// Actual initilization
 	flag.Parse()
 	fmt.Print("\n")
@@ -355,7 +336,3 @@ func setLog(name string) *os.File {
 	log.SetOutput(f)
 	return f
 }
-
-// Step 1: Clients finds server ports by pinging all possible ports
-// Step 2: Clients Join channel on all available serverports
-//
