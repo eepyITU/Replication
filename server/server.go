@@ -125,7 +125,7 @@ func (s *AuctionServiceServer) validBid(msg string) bool {
 		return false
 	}
 
-	return Bid >= int(s.CurrentHighestBid)
+	return Bid > int(s.CurrentHighestBid)
 }
 
 // Function to increase server's Lamport timestamp; used after receiving a message
