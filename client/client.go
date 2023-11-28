@@ -102,8 +102,8 @@ func sendMessage(ctx context.Context, client pb.AuctionServiceClient, message st
 			sendMessageToAllServers(ctx, bidstring)
 		}
 
-	} else {
-		print := "Could not convert big message to integer"
+	} else if err != nil && message != resultCommand {
+		print := "Could not convert bid message to integer"
 		log.Println(print)
 		fmt.Println(print)
 	}
@@ -154,7 +154,7 @@ func findServerPorts() {
 	} else {
 		print := fmt.Sprintf("No server ports provided")
 		log.Fatalln(print)
-		fmt.Println(print)
+		//fmt.Println(print)
 	}
 }
 
@@ -300,7 +300,7 @@ func printHelpMessage() {
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ - Example: 420 (press enter)")
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the current bid or result of the auction, type " + resultCommand)
 	fmt.Println("⋆｡˚ ☁︎ ˚｡ To see the help menu, type " + helpMenuCommand)
-	fmt.Println("⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n")
+	fmt.Fprintln(os.Stdout, []any{"⋆｡˚ ☁︎ ˚｡ To exit, press Ctrl + C\n"}...)
 }
 
 var randomInt, err = rand.Int(rand.Reader, big.NewInt(1000))
