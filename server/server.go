@@ -172,10 +172,9 @@ var timeLimitDuration = flag.Int("time", 120, "The auction time limit in seconds
 
 func main() {
 	// Sets the logger to use a log.txt file instead of the console
-	f := setLog()
-	defer f.Close()
-
 	flag.Parse()
+	f := setLog(*serverPort)
+	defer f.Close()
 
 	connectionString := ":" + strconv.Itoa(*serverPort)
 	lis, err := net.Listen("tcp", connectionString)
@@ -202,10 +201,9 @@ func main() {
 	grpcServer.Serve(lis)
 }
 
-var serverTextName = fmt.Sprintf("Server%v.txt", *serverPort)
-
 // sets the logger to use a log.txt file instead of the console
-func setLog() *os.File {
+func setLog(serverPort int) *os.File {
+	serverTextName := fmt.Sprintf("Server%v.txt", serverPort)
 	if _, err := os.Open(serverTextName); err == nil {
 		if err := os.Truncate(serverTextName, 0); err != nil {
 			log.Printf("Failed to truncate: %v", err)
