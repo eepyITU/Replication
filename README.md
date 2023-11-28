@@ -5,7 +5,7 @@ eepy auction service.
 
 ## How to run and use the Eepy Auction:
 1. Open up as many terminals as you'd like. The client can connect to N many terminals. (No, we haven't limit-tested N.)
-- We recommend opening two terminals for servers, and two terminals for clients. Or more if you want, you decide <3
+- We recommend opening two terminals for servers, and two terminals for clients. Or more if you want, you decide.
 
 2. For the server-terminals, start each of the servers by running the command `go run server/server.go -port <PortNumber>`.
 - Note that running `go run server/server.go` defaults to port :8080.
@@ -28,7 +28,7 @@ eepy auction service.
 8. Log files for the server can be found in the server folder saved as `Server<PortNumber>.txt`.
 
 ## Copy-pastes for TA's convenience:
-3 servers:
+2 servers:
 `go run server/server.go`
 `go run server/server.go -port 8081`
 
